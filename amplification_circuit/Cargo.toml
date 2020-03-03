@@ -8,4 +8,4 @@ edition = "2018"
 
 [dependencies]
 itertools = "0.8.2"
-intcode_computer = { path = "../../intcode_computer" }
+intcode_computer = { path = "../intcode_computer" }
