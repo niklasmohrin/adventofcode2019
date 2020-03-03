@@ -1,44 +1,10 @@
 //! Implementation of the Amplifier Circuit described in day 7 of the 2019 [Advent of Code](adventofcode.com)
 
-use intcode_computer::{read_program_from_file, run_program, IntcodeIo, Opcode};
+use intcode_channel_io::{IntcodeChannelIo, Message};
+use intcode_computer::{read_program_from_file, run_program, Opcode};
 use std::cell::RefCell;
 use std::sync::mpsc;
 use std::thread;
-
-/// Message type to be sent between threads.
-pub enum Message {
-    Data(Opcode),
-    Exited,
-}
-
-/// Implementation of intcode_computer::IntcodeIo with mpsc channels.
-pub struct IntcodeChannelIo {
-    sender: mpsc::Sender<Message>,
-    receiver: mpsc::Receiver<Message>,
-}
-
-impl IntcodeChannelIo {
-    fn new(sender: mpsc::Sender<Message>, receiver: mpsc::Receiver<Message>) -> IntcodeChannelIo {
-        IntcodeChannelIo { sender, receiver }
-    }
-
-    fn send_exit_signal(&self) {
-        self.sender.send(Message::Exited).unwrap();
-    }
-}
-
-impl IntcodeIo for IntcodeChannelIo {
-    fn read(&self) -> Opcode {
-        match self.receiver.recv().unwrap() {
-            Message::Data(val) => val,
-            _ => panic!("weird message"),
-        }
-    }
-
-    fn write(&self, value: &Opcode) {
-        self.sender.send(Message::Data(value.clone())).unwrap();
-    }
-}
 
 /// An amplifier, that is initially set to a phase mode
 /// and then able to receive a signal and amplify (send) it.
