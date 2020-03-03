@@ -4,9 +4,57 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fs;
 use std::io;
+use std::iter::FromIterator;
+use std::ops::{Index, IndexMut};
 
-pub type Opcode = i32;
-pub type ProgramMemory = Vec<Opcode>;
+pub type Opcode = i64;
+
+/// Factor of growth of the underlying vector in ProgramMemory.
+const MEMORY_MULTIPLIER: usize = 2;
+
+/// Provides a vector without an upper index bound.
+pub struct ProgramMemory {
+    mem: Vec<Opcode>,
+    size: usize,
+}
+
+impl ProgramMemory {
+    /// Should be called before accessing.
+    pub fn ensure_size(&mut self, wanted_size: usize) {
+        if wanted_size >= self.size {
+            while wanted_size >= self.size {
+                self.size *= MEMORY_MULTIPLIER;
+            }
+            self.mem.resize(self.size, 0);
+        }
+    }
+}
+
+impl FromIterator<Opcode> for ProgramMemory {
+    fn from_iter<I: IntoIterator<Item = Opcode>>(iter: I) -> Self {
+        let mem = Vec::from_iter(iter);
+        let size = mem.len();
+        ProgramMemory { mem, size }
+    }
+}
+
+impl Index<usize> for ProgramMemory {
+    type Output = Opcode;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        assert!(index < self.size);
+
+        &self.mem[index]
+    }
+}
+
+impl IndexMut<usize> for ProgramMemory {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        assert!(index < self.size);
+
+        &mut self.mem[index]
+    }
+}
 
 /// IO of the Computer can be done through any struct that implements this.
 pub trait IntcodeIo {
@@ -39,7 +87,7 @@ impl IntcodeIo for IntcodeStdIo {
 
 /// Pairs of instruction part of an opcode and the correspondig length (including parameters).
 /// This array can (and will) be used to initialize a HashMap<u8, u8> for faster lookup.
-const OPCODE_LENGHTS_ARR: [(u8, u8); 9] = [
+const OPCODE_LENGHTS_ARR: [(u8, u8); 10] = [
     (99, 1),
     (1, 4),
     (2, 4),
@@ -49,6 +97,7 @@ const OPCODE_LENGHTS_ARR: [(u8, u8); 9] = [
     (6, 3),
     (7, 4),
     (8, 4),
+    (9, 2),
 ];
 
 /// Run a program as described in the challenges of [Advent of Code](adventofcode.com).
@@ -58,7 +107,13 @@ pub fn run_program<T: IntcodeIo>(program: &mut ProgramMemory, inout: &T) {
     // program counter, starting at index 0
     let mut pc = 0usize;
 
+    // relative base, starting at index 0
+    let mut relative_base = 0isize;
+
     loop {
+        // This covers the access of the opcode and all parameters (without derefferencing these).
+        program.ensure_size(pc + *opcode_lenghts.values().max().unwrap_or(&0) as usize);
+
         // fetch the opcode and split it into instruction and modes
         let opcode = program[pc];
         let instruction: u8 = (opcode % 100).try_into().unwrap();
@@ -74,11 +129,19 @@ pub fn run_program<T: IntcodeIo>(program: &mut ProgramMemory, inout: &T) {
         // the needed values are right after the opcode
         let parameter_adrs: Vec<usize> = (0usize..(op_len - 1))
             .map(|i| match modes[i] {
+                // position mode
                 0 => program[pc + 1usize + i as usize] as usize,
+                // immediate mode
                 1 => pc + 1usize + i as usize,
+                // relative mode
+                2 => (relative_base + program[pc + 1usize + i] as isize) as usize,
                 _ => panic!("unsupported operand mode!"),
             })
             .collect();
+
+        // since we will be accessing these memory addresses, we will have to ensure that they are loaded too
+        let max_index = *parameter_adrs.iter().max().unwrap_or(&0);
+        program.ensure_size(max_index);
 
         // set if a jump is performed; if not the pc will have to be incremented according to the opcode length and parameter count
         let mut pc_jumped = false;
@@ -137,6 +200,11 @@ pub fn run_program<T: IntcodeIo>(program: &mut ProgramMemory, inout: &T) {
                 let p1 = program[parameter_adrs[0]];
                 let p2 = program[parameter_adrs[1]];
                 program[parameter_adrs[2]] = (p1 == p2).into();
+            }
+            // adjust relative base
+            9 => {
+                let p1 = program[parameter_adrs[0]] as isize;
+                relative_base += p1;
             }
             _ => panic!("unsupported instruction!"),
         };
