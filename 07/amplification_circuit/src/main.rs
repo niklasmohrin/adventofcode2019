@@ -7,15 +7,13 @@ use itertools::Itertools;
 
 // https://docs.rs/itertools/0.8.2/itertools/trait.Itertools.html#method.permutations
 
-const FILENAME: &str = "../input.txt";
-
 #[allow(dead_code)]
-fn first_part() {
+fn first_part(filename: &str) {
     let mut max_signal = 0;
     for setting in (0..5).permutations(5) {
         let mut signal = 0;
         for phase in setting {
-            let amp = Amplifier::new(FILENAME, phase);
+            let amp = Amplifier::new(&filename, phase);
             amp.send(signal.clone());
             signal = amp.recv().unwrap();
             // amp.handle.join().unwrap();
@@ -28,12 +26,12 @@ fn first_part() {
 }
 
 #[allow(dead_code)]
-fn second_part() {
+fn second_part(filename: &str) {
     let mut max_signal = 0;
     for setting in (5..10).permutations(5) {
         let amplifiers: Vec<Amplifier> = setting
             .iter()
-            .map(|i| Amplifier::new(FILENAME, *i))
+            .map(|i| Amplifier::new(&filename, *i))
             .collect();
         let mut signal = 0;
         while !amplifiers.last().unwrap().has_exited() {
@@ -55,6 +53,9 @@ fn second_part() {
 }
 
 fn main() {
-    first_part();
-    second_part();
+    let mut args = std::env::args();
+    args.next();
+    let filename = args.next().unwrap_or("input.txt".to_string());
+    first_part(&filename);
+    second_part(&filename);
 }
