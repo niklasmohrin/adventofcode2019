@@ -91,14 +91,13 @@ impl IntcodeThread {
 
     /// Receives an Opcode from the worker and maybe update internal exited field.
     pub fn recv(&self) -> Option<Opcode> {
-        print!("[{}]: ", self.identifier);
         match self.receiver.recv().unwrap() {
             Message::Data(val) => {
-                println!("received <{}> from worker...", val);
+                println!("[{}]: received <{}> from worker...", self.identifier, val);
                 Some(val)
             }
             Message::Exited => {
-                println!("worker has exited");
+                println!("[{}]: worker has exited", self.identifier);
                 *self.exited.borrow_mut() = true;
                 None
             }
@@ -108,5 +107,9 @@ impl IntcodeThread {
     /// Public getter for (internally mutable) "exited" field.
     pub fn has_exited(&self) -> bool {
         *self.exited.borrow()
+    }
+
+    pub fn clone_sender(&self) -> mpsc::Sender<Message> {
+        self.sender.clone()
     }
 }
