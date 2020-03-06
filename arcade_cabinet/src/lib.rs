@@ -1,10 +1,10 @@
 //! Interface for the Arcade Cabinet Game from day 13 of [Advent of Code 2019](adventofcode.com)
 
-use intcode_computer::{run_program, IntcodeIo, Opcode, ProgramMemory};
+use intcode_computer::{run_program, InfiniteVector, IntcodeIo, Opcode, ProgramMemory};
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::convert::TryInto;
 use std::io;
+use std::ops::{Index, IndexMut};
 
 const EMPTY_TILE_CHAR: char = ' ';
 const WALL_TILE_CHAR: char = '#';
@@ -54,12 +54,69 @@ impl From<Tile> for char {
     }
 }
 
+impl Default for Tile {
+    fn default() -> Self {
+        Tile::Empty
+    }
+}
+
 /// Range of a single axis of the drawing board.
-type Axis = i32;
+type Axis = u32;
 
 /// A coordinate on the drawing board.
 #[derive(PartialEq, Eq, Hash, Clone)]
 struct Coordinate(Axis, Axis);
+
+#[derive(Default)]
+struct TileScreen {
+    data: InfiniteVector<InfiniteVector<Tile>>,
+}
+
+impl TileScreen {
+    pub fn new() -> Self {
+        TileScreen {
+            ..Default::default()
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
+
+    pub fn iter(&self) -> core::slice::Iter<InfiniteVector<Tile>> {
+        self.data.iter()
+    }
+}
+
+impl Index<Coordinate> for TileScreen {
+    type Output = Tile;
+
+    fn index(&self, index: Coordinate) -> &Self::Output {
+        let Coordinate(x, y) = index;
+        &self.data[y as usize][x as usize]
+    }
+}
+
+impl IndexMut<Coordinate> for TileScreen {
+    fn index_mut(&mut self, index: Coordinate) -> &mut Self::Output {
+        let Coordinate(x, y) = index;
+        &mut self.data[y as usize][x as usize]
+    }
+}
+
+impl Index<usize> for TileScreen {
+    type Output = InfiniteVector<Tile>;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.data[index]
+    }
+}
+
+impl IndexMut<usize> for TileScreen {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.data[index]
+    }
+}
 
 /// Buffers three outputs from the intcode program.
 struct ArcadeCabinetOutputBuffer {
@@ -69,7 +126,7 @@ struct ArcadeCabinetOutputBuffer {
 
 /// Maps from intcode computer Opcode IO to a screen state and handles stdin and stdout for the player.
 struct ArcadeCabinetIo {
-    pub screen: RefCell<HashMap<Coordinate, Tile>>, // TODO: This should be a Vec<Vec<Tile>> with background resizing
+    pub screen: RefCell<TileScreen>,
     pub score: RefCell<Opcode>,
     stdin: io::Stdin,
     buffered_output: RefCell<ArcadeCabinetOutputBuffer>,
@@ -79,7 +136,7 @@ struct ArcadeCabinetIo {
 impl ArcadeCabinetIo {
     pub fn new(automatic_mode: bool) -> Self {
         let stdin = io::stdin();
-        let screen = RefCell::new(HashMap::new());
+        let screen = RefCell::new(TileScreen::new());
         let score = RefCell::new(0);
         let buffered_output = RefCell::new(ArcadeCabinetOutputBuffer {
             buffer: [None, None, None],
@@ -98,20 +155,13 @@ impl ArcadeCabinetIo {
     /// Print the current screen state to stdout.
     pub fn print_screen(&self) {
         let screen = self.screen.borrow_mut();
-        let coordinates: Vec<&Coordinate> = screen.keys().collect();
-        let xs: Vec<Axis> = coordinates.iter().map(|coord| coord.0).collect();
-        let ys: Vec<Axis> = coordinates.iter().map(|coord| coord.1).collect();
-
-        let x_min = 0;
-        let x_max = *xs.iter().max().unwrap();
-        let y_min = 0;
-        let y_max = *ys.iter().max().unwrap();
-
-        for y in y_min..=y_max {
-            for x in x_min..=x_max {
+        for y in 0..screen.len() {
+            let row = &screen[y];
+            for x in 0..row.len() {
+                let x = x.try_into().unwrap();
+                let y = y.try_into().unwrap();
                 let coord = Coordinate(x, y);
-                let c = *screen.get(&coord).unwrap_or(&Tile::Empty);
-                let c: char = c.into();
+                let c: char = screen[coord].into();
                 print!("{}", c);
             }
             println!();
@@ -131,16 +181,8 @@ impl ArcadeCabinetIo {
         buffered_output.buffered_opcodes = 0;
 
         // The first and second opcodes are the x and y position on the screen.
-        let x: Axis = buffered_output.buffer[0]
-            .take()
-            .unwrap()
-            .try_into()
-            .unwrap();
-        let y: Axis = buffered_output.buffer[1]
-            .take()
-            .unwrap()
-            .try_into()
-            .unwrap();
+        let x = buffered_output.buffer[0].take().unwrap();
+        let y = buffered_output.buffer[1].take().unwrap();
 
         if x == -1 && y == 0 {
             // Special output coordinates, signaling the third opcode is the current score.
@@ -149,36 +191,31 @@ impl ArcadeCabinetIo {
         } else {
             // Otherwise, the third opcode maps to the tile at these coordinates.
             let tile: Tile = buffered_output.buffer[2].take().unwrap().into();
+            let x: Axis = x.try_into().unwrap();
+            let y: Axis = y.try_into().unwrap();
             let coord = Coordinate(x, y);
-            self.screen.borrow_mut().insert(coord, tile);
+            self.screen.borrow_mut()[coord] = tile;
         }
     }
 }
 
 impl IntcodeIo for ArcadeCabinetIo {
     fn read(&self) -> Opcode {
-        // Read internal index, increase by one and keep working with current one
-        *self.total_inputs_read.borrow_mut() += 1;
-
         // The intcode program wants user input, the user should now get to see the current screen.
         self.print_screen();
         self.print_score();
 
         if self.automatic_mode {
             let screen = self.screen.borrow();
-            let x_ball = (screen
+            let x_ball = screen
                 .iter()
-                .find(|&(_coord, tile)| *tile == Tile::Ball)
-                .unwrap()
-                .0) // Coordinate
-                .0; // x value
-            let x_player = (screen
+                .find_map(|row| row.iter().position(|&t| t == Tile::Ball))
+                .unwrap();
+            let x_player = screen
                 .iter()
-                .find(|&(_coord, tile)| *tile == Tile::HorizontalPaddle)
-                .unwrap()
-                .0) // Coordinate
-                .0; // x value
-            (x_ball - x_player).signum().into()
+                .find_map(|row| row.iter().position(|&t| t == Tile::HorizontalPaddle))
+                .unwrap();
+            (x_ball as Opcode - x_player as Opcode).signum().into()
         } else {
             let mut val = String::new();
             self.stdin.read_line(&mut val).unwrap();
@@ -242,8 +279,8 @@ impl ArcadeCabinet {
         self.inout
             .screen
             .borrow()
-            .values()
-            .filter(|&&t| t == tile)
-            .count()
+            .iter()
+            .map(|v| v.iter().filter(|&&t| t == tile).count())
+            .sum()
     }
 }
