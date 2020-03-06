@@ -158,13 +158,18 @@ pub fn run_program<T: IntcodeIo>(program: &mut ProgramMemory, inout: &T) {
                 1 => pc + 1usize + i as usize,
                 // relative mode
                 2 => (relative_base + program[pc + 1usize + i] as isize) as usize,
-                _ => panic!("unsupported operand mode!"),
+                x => panic!("unsupported operand mode: {}", x),
             })
             .collect();
 
         // since we will be accessing these memory addresses, we will have to ensure that they are loaded too
         let max_index = *parameter_adrs.iter().max().unwrap_or(&0);
         program.ensure_size(max_index);
+
+        let params: Vec<&Opcode> = parameter_adrs
+            .iter()
+            .map(|&adr| program.index(adr))
+            .collect();
 
         // set if a jump is performed; if not the pc will have to be incremented according to the opcode length and parameter count
         let mut pc_jumped = false;
@@ -174,15 +179,11 @@ pub fn run_program<T: IntcodeIo>(program: &mut ProgramMemory, inout: &T) {
             99 => break,
             // addition
             1 => {
-                let p1 = program[parameter_adrs[0]];
-                let p2 = program[parameter_adrs[1]];
-                program[parameter_adrs[2]] = p1 + p2;
+                program[parameter_adrs[2]] = *params[0] + *params[1];
             }
             // multiplication
             2 => {
-                let p1 = program[parameter_adrs[0]];
-                let p2 = program[parameter_adrs[1]];
-                program[parameter_adrs[2]] = p1 * p2;
+                program[parameter_adrs[2]] = *params[0] * *params[1];
             }
             // input
             3 => {
@@ -191,43 +192,33 @@ pub fn run_program<T: IntcodeIo>(program: &mut ProgramMemory, inout: &T) {
             }
             // output
             4 => {
-                let val = program[parameter_adrs[0]];
-                inout.write(&val);
+                inout.write(params[0]);
             }
             // jump not equal
             5 => {
-                let p1 = program[parameter_adrs[0]];
-                let p2 = program[parameter_adrs[1]];
-                if p1 != 0 {
+                if *params[0] != 0 {
                     pc_jumped = true;
-                    pc = p2.try_into().unwrap();
+                    pc = (*params[1]).try_into().unwrap();
                 }
             }
             // jump equal
             6 => {
-                let p1 = program[parameter_adrs[0]];
-                let p2 = program[parameter_adrs[1]];
-                if p1 == 0 {
+                if *params[0] == 0 {
                     pc_jumped = true;
-                    pc = p2.try_into().unwrap();
+                    pc = (*params[1]).try_into().unwrap();
                 }
             }
             // less than
             7 => {
-                let p1 = program[parameter_adrs[0]];
-                let p2 = program[parameter_adrs[1]];
-                program[parameter_adrs[2]] = (p1 < p2).into();
+                program[parameter_adrs[2]] = (params[0] < params[1]).into();
             }
             // equality
             8 => {
-                let p1 = program[parameter_adrs[0]];
-                let p2 = program[parameter_adrs[1]];
-                program[parameter_adrs[2]] = (p1 == p2).into();
+                program[parameter_adrs[2]] = (params[0] == params[1]).into();
             }
             // adjust relative base
             9 => {
-                let p1 = program[parameter_adrs[0]] as isize;
-                relative_base += p1;
+                relative_base += *params[0] as isize;
             }
             _ => panic!("unsupported instruction!"),
         };
