@@ -12,49 +12,72 @@ pub type Opcode = i64;
 /// Factor of growth of the underlying vector in ProgramMemory.
 const MEMORY_MULTIPLIER: usize = 2;
 
-/// Provides a vector without an upper index bound.
-pub struct ProgramMemory {
-    mem: Vec<Opcode>,
-    size: usize,
+#[derive(Default, Clone)]
+pub struct InfiniteVector<T: Clone + Default> {
+    data: Vec<T>,
+    default: T,
 }
 
-impl ProgramMemory {
-    /// Should be called before accessing.
+impl<T: Clone + Default> InfiniteVector<T> {
+    pub fn new() -> InfiniteVector<T> {
+        InfiniteVector {
+            data: Vec::new(),
+            default: Default::default(),
+        }
+    }
+
+    /// Should be called before giving out mutable references.
     pub fn ensure_size(&mut self, wanted_size: usize) {
-        if wanted_size >= self.size {
-            while wanted_size >= self.size {
-                self.size *= MEMORY_MULTIPLIER;
+        if wanted_size >= self.data.len() {
+            let mut len = self.data.len() + 1;
+            while wanted_size >= len {
+                len *= MEMORY_MULTIPLIER;
             }
-            self.mem.resize(self.size, 0);
+            self.data.resize(len, Default::default());
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
+
+    pub fn iter(&self) -> core::slice::Iter<T> {
+        self.data.iter()
+    }
+}
+
+impl<T: Clone + Default> FromIterator<T> for InfiniteVector<T> {
+    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
+        let data = Vec::from_iter(iter);
+        InfiniteVector {
+            data,
+            default: Default::default(),
         }
     }
 }
 
-impl FromIterator<Opcode> for ProgramMemory {
-    fn from_iter<I: IntoIterator<Item = Opcode>>(iter: I) -> Self {
-        let mem = Vec::from_iter(iter);
-        let size = mem.len();
-        ProgramMemory { mem, size }
-    }
-}
-
-impl Index<usize> for ProgramMemory {
-    type Output = Opcode;
+impl<T: Clone + Default> Index<usize> for InfiniteVector<T> {
+    type Output = T;
 
     fn index(&self, index: usize) -> &Self::Output {
-        assert!(index < self.size);
-
-        &self.mem[index]
+        if index < self.data.len() {
+            &self.data[index]
+        } else {
+            &self.default
+        }
     }
 }
 
-impl IndexMut<usize> for ProgramMemory {
+impl<T: Clone + Default> IndexMut<usize> for InfiniteVector<T> {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        assert!(index < self.size);
+        self.ensure_size(index);
 
-        &mut self.mem[index]
+        &mut self.data[index]
     }
 }
+
+/// Provides a vector without an upper index bound.
+pub type ProgramMemory = InfiniteVector<Opcode>;
 
 /// IO of the Computer can be done through any struct that implements this.
 pub trait IntcodeIo {
