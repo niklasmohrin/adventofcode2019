@@ -59,7 +59,7 @@ type Axis = i32;
 
 /// A coordinate on the drawing board.
 #[derive(PartialEq, Eq, Hash, Clone)]
-pub struct Coordinate(Axis, Axis);
+struct Coordinate(Axis, Axis);
 
 /// Buffers three outputs from the intcode program.
 struct ArcadeCabinetOutputBuffer {
@@ -114,6 +114,10 @@ impl ArcadeCabinetIo {
             }
             println!();
         }
+    }
+
+    /// Prints the current score.
+    pub fn print_score(&self) {
         println!("Score: {}", self.score.borrow());
     }
 
@@ -206,6 +210,8 @@ impl ArcadeCabinet {
     pub fn run(&self, mut program: ProgramMemory, quarters: Opcode) {
         program[0] = quarters;
         run_program(&mut program, &self.inout);
+        self.inout.print_screen();
+        self.inout.print_score();
     }
 
     /// Count the occurences of a specific type of tile on the current screen.
