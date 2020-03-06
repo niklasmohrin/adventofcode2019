@@ -7,7 +7,7 @@ fn main() {
     let filename = args.next().unwrap_or(String::from("input.txt"));
 
     let program = read_program_from_file(&filename);
-    let cabinet = ArcadeCabinet::new();
+    let cabinet = ArcadeCabinet::new(true);
     cabinet.run(program, 2);
     println!("Block tiles: {}", cabinet.count_tile(Tile::Block));
 }

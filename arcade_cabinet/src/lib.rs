@@ -73,10 +73,11 @@ struct ArcadeCabinetIo {
     pub score: RefCell<Opcode>,
     stdin: io::Stdin,
     buffered_output: RefCell<ArcadeCabinetOutputBuffer>,
+    automatic_mode: bool,
 }
 
 impl ArcadeCabinetIo {
-    pub fn new() -> Self {
+    pub fn new(automatic_mode: bool) -> Self {
         let stdin = io::stdin();
         let screen = RefCell::new(HashMap::new());
         let score = RefCell::new(0);
@@ -90,6 +91,7 @@ impl ArcadeCabinetIo {
             screen,
             score,
             buffered_output,
+            automatic_mode,
         }
     }
 
@@ -154,20 +156,41 @@ impl ArcadeCabinetIo {
 }
 
 impl IntcodeIo for ArcadeCabinetIo {
-    /// The intcode program wants user input, the user should now get to see the current screen.
     fn read(&self) -> Opcode {
+        // Read internal index, increase by one and keep working with current one
+        *self.total_inputs_read.borrow_mut() += 1;
+
+        // The intcode program wants user input, the user should now get to see the current screen.
         self.print_screen();
+        self.print_score();
 
-        // Also, it would be nice if the program actually gets some input.
-        let mut val = String::new();
-        self.stdin.read_line(&mut val).unwrap();
+        if self.automatic_mode {
+            let screen = self.screen.borrow();
+            let x_ball = (screen
+                .iter()
+                .find(|&(_coord, tile)| *tile == Tile::Ball)
+                .unwrap()
+                .0) // Coordinate
+                .0; // x value
+            let x_player = (screen
+                .iter()
+                .find(|&(_coord, tile)| *tile == Tile::HorizontalPaddle)
+                .unwrap()
+                .0) // Coordinate
+                .0; // x value
+            (x_ball - x_player).signum().into()
+        } else {
+            let mut val = String::new();
+            self.stdin.read_line(&mut val).unwrap();
 
-        // Instead of typing -1, 0 or 1 manually, the keys a, s and d can be used instead.
-        match val.chars().next().unwrap() {
-            'a' => -1,
-            's' => 0,
-            'd' => 1,
-            _ => panic!("Invalid input"),
+            // Instead of typing -1, 0 or 1 manually, the keys a, s and d can be used instead.
+            match val.chars().next().unwrap() {
+                'a' => -1,
+                's' => 0,
+                'd' => 1,
+                // Matches everything else
+                unknown_char => panic!("Invalid input: {}", unknown_char),
+            }
         }
     }
 
@@ -200,8 +223,8 @@ pub struct ArcadeCabinet {
 }
 
 impl ArcadeCabinet {
-    pub fn new() -> Self {
-        let inout = ArcadeCabinetIo::new();
+    pub fn new(automatic_mode: bool) -> Self {
+        let inout = ArcadeCabinetIo::new(automatic_mode);
         Self { inout }
     }
 
