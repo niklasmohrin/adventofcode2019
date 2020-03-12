@@ -1,4 +1,4 @@
-//! IO over mpsc channels for the [Advent of Code](adventofcode.com) Intcode Computer.
+//! IO over mpsc channels for the [Advent of Code 2019](adventofcode.com/2019) Intcode Computer.
 
 use intcode_computer::{run_program, IntcodeIo, Opcode, ProgramMemory};
 use std::cell::RefCell;
@@ -6,6 +6,7 @@ use std::sync::mpsc;
 use std::thread;
 
 /// Message type to be sent between threads.
+#[derive(Debug)]
 pub enum Message {
     Data(Opcode),
     Exited,
@@ -32,8 +33,9 @@ impl IntcodeChannelIo {
 
 impl IntcodeIo for IntcodeChannelIo {
     fn read(&self) -> Opcode {
-        match self.receiver.recv().unwrap() {
-            Message::Data(val) => val,
+        match self.receiver.recv() {
+            Ok(Message::Data(val)) => val,
+            Err(_) => panic!("Error receiving, sender thread must be down..."),
             _ => panic!("weird message"),
         }
     }
@@ -45,11 +47,12 @@ impl IntcodeIo for IntcodeChannelIo {
 
 /// The interface for the worker thread
 pub struct IntcodeThread {
-    pub handle: thread::JoinHandle<ProgramMemory>,
+    handle: Option<thread::JoinHandle<ProgramMemory>>,
     sender: mpsc::Sender<Message>,
     receiver: mpsc::Receiver<Message>,
     exited: RefCell<bool>,
     pub identifier: String,
+    pub hide_debug_messages: bool,
 }
 
 impl IntcodeThread {
@@ -59,13 +62,15 @@ impl IntcodeThread {
         let (thread_sender, host_receiver) = mpsc::channel();
         let inout = IntcodeChannelIo::new(thread_sender, thread_receiver);
 
-        let handle = thread::spawn(move || {
+        let handle = Some(thread::spawn(move || {
             run_program(&mut program, &inout);
             inout.send_exit_signal();
             program
-        });
+        }));
 
         let identifier = identifier.unwrap_or(String::from("Thread ?"));
+
+        let hide_debug_messages = false;
 
         IntcodeThread {
             handle,
@@ -73,12 +78,15 @@ impl IntcodeThread {
             receiver: host_receiver,
             exited: RefCell::new(false),
             identifier,
+            hide_debug_messages,
         }
     }
 
     /// Sends an Opcode to the underlying worker thread.
     pub fn send(&self, value: Opcode) {
-        println!("[{}]: sending <{}> to worker", self.identifier, value);
+        if !self.hide_debug_messages {
+            println!("[{}]: sending <{}> to worker", self.identifier, value);
+        }
         self.sender
             .send(Message::Data(value))
             .unwrap_or_else(|err| {
@@ -93,7 +101,9 @@ impl IntcodeThread {
     pub fn recv(&self) -> Option<Opcode> {
         match self.receiver.recv().unwrap() {
             Message::Data(val) => {
-                println!("[{}]: received <{}> from worker...", self.identifier, val);
+                if !self.hide_debug_messages {
+                    println!("[{}]: received <{}> from worker...", self.identifier, val);
+                }
                 Some(val)
             }
             Message::Exited => {
@@ -111,5 +121,18 @@ impl IntcodeThread {
 
     pub fn clone_sender(&self) -> mpsc::Sender<Message> {
         self.sender.clone()
+    }
+
+    pub fn join(&mut self) -> ProgramMemory {
+        self.handle
+            .take()
+            .unwrap_or_else(|| {
+                panic!(
+                    "[{}]: Tried to join the thread, but the handle was already taken.",
+                    self.identifier
+                )
+            })
+            .join()
+            .unwrap()
     }
 }
