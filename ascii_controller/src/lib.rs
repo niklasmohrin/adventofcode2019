@@ -6,9 +6,9 @@ use std::convert::TryInto;
 mod types;
 use types::{Coordinate, Direction, Field, Move};
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct AsciiMovementFunction {
-    moves: Vec<Move>,
+    pub moves: Vec<Move>,
 }
 
 impl AsciiMovementFunction {
@@ -32,201 +32,218 @@ impl AsciiMovementFunction {
     }
 }
 
+impl From<&'static str> for AsciiMovementFunction {
+    fn from(s: &'static str) -> Self {
+        let mut moves = Vec::new();
+        for c in s.split(",") {
+            match c {
+                "L" => moves.push(Move::TurnLeft),
+                "R" => moves.push(Move::TurnRight),
+                x => {
+                    let x: usize = x.parse().unwrap();
+                    for _ in 0..x {
+                        moves.push(Move::Forward);
+                    }
+                }
+            }
+        }
+
+        Self { moves }
+    }
+}
+
+#[derive(Default)]
 struct AsciiMainRoutine {
     routine: Vec<u8>,
     movement_functions: [AsciiMovementFunction; 3],
+    max_opcodes: usize,
+    needed_moves: Vec<Move>,
 }
 
 impl AsciiMainRoutine {
+    fn matches(&self, f: &AsciiMovementFunction, offset: usize) -> bool {
+        let f_len = f.moves.len();
+
+        !self.routine_too_long()
+            && f_len > 0
+            && offset + f_len <= self.needed_moves.len()
+            && self.needed_moves[offset..offset + f_len] == f.moves[..]
+    }
+
+    fn routine_too_long(&self) -> bool {
+        (self.routine.len() * 2) >= self.max_opcodes
+    }
+
+    /// If possible, contructs a movement function of length c_len, that matches the next c_len moves
+    /// at offset and complies with self.max_opcodes, and writes it into c_fund.
+    fn next_c_func(
+        &self,
+        c_func: &mut AsciiMovementFunction,
+        c_len: usize,
+        offset: usize,
+    ) -> Result<(), ()> {
+        c_func.moves = self.needed_moves[offset..offset + c_len].to_vec();
+
+        let c_matches = self.matches(&c_func, offset);
+        if !c_matches || c_func.to_opcode_string().len() > self.max_opcodes {
+            c_func.moves.clear();
+            return Err(());
+        }
+
+        Ok(())
+    }
+
     pub fn construct_from_moves(
         moves: Vec<Move>,
         max_opcodes: usize,
     ) -> Result<Self, &'static str> {
+        let mut main = AsciiMainRoutine {
+            max_opcodes,
+            needed_moves: moves,
+            ..Default::default()
+        };
+
+        let mut a_func: AsciiMovementFunction = Default::default();
+        let mut b_func: AsciiMovementFunction = Default::default();
+        let moves_needed = main.needed_moves.len();
+
         // Since we need to cover the first n moves, there has to be a movement function that matches these n moves
-        for a_len in 0..moves.len() {
+        for a_len in 1..moves_needed {
             println!("Trying a_len {}", a_len);
-            let a_func = AsciiMovementFunction {
-                moves: moves[..a_len].to_vec(),
-            };
+            a_func.moves = main.needed_moves[..a_len].to_vec();
             if a_func.to_opcode_string().len() > max_opcodes {
                 // If we did not find something up to this point, we will not find anything else,
                 // since the opcode string can only get longer.
+                println!(
+                    "Len {} is too long with {:?}",
+                    a_len,
+                    a_func.to_opcode_string()
+                );
                 break;
             }
             // Similarly, there has to be a movement function for the last n moves
-            for b_len in 0..(moves.len() - a_len) {
-                println!("\tTrying b_len {}", b_len);
-                let b_func = AsciiMovementFunction {
-                    moves: moves[moves.len() - b_len..].to_vec(),
-                };
+            for b_len in 0..(moves_needed - a_len) {
+                // println!("\tTrying b_len {}", b_len);
+                b_func.moves = main.needed_moves[moves_needed - b_len..].to_vec();
                 if b_func.to_opcode_string().len() > max_opcodes {
                     // With this length of a, there does not seem to be a solution,
                     // that fits the requirements. The opcode string can only get longer,
                     // so it is okay to skip the other lengths.
                     break;
                 }
-                // Finally, we need to try to come as far as possible from the start with a and b.
-                // If we cannot go any further, we know the first moves of the third movement function.
-                // Similarly, we can do the same thing from the back.
-                const A_INDEX: u8 = 0;
-                const B_INDEX: u8 = 1;
-                const C_INDEX: u8 = 2;
 
-                let mut main: Vec<u8> = vec![A_INDEX];
-                let mut covered_moves = a_len;
-                let needed_moves = moves.len();
-                let mut just_popped: Option<i8> = None;
-
-                let mut c_len = 0;
-                let mut c_func = AsciiMovementFunction { moves: Vec::new() };
-                let mut c_funcs_on_stack = 0;
-
-                while !main.is_empty() {
-                    if b_len == 9 {
-                        println!("{:?}", main);
-                    }
-                    if covered_moves == needed_moves && (main.len() * 2 - 1) <= max_opcodes {
-                        // The number of covered moves is correct and the length of the opcode string of
-                        // the main function (one character per function, comma seperated, so two chars per function minus
-                        // the missing last comma) is not too long.
-                        let routine = AsciiMainRoutine {
-                            routine: main,
-                            movement_functions: [a_func, b_func, c_func],
-                        };
-                        return Ok(routine);
-                    } else {
-                        // TODO: make this into some smart thing, so that it only compares the vectors if it really needs to know
-                        let a_matches = a_len > 0
-                            && a_len + covered_moves <= needed_moves
-                            && moves[covered_moves..covered_moves + a_len] == a_func.moves[..];
-                        let b_matches = b_len > 0
-                            && b_len + covered_moves <= needed_moves
-                            && moves[covered_moves..covered_moves + b_len] == b_func.moves[..];
-                        let c_matches = c_len > 0
-                            && c_len + covered_moves <= needed_moves
-                            && moves[covered_moves..covered_moves + c_len] == c_func.moves[..];
-                        if a_matches || b_matches || c_matches {
-                            let popped = just_popped.take().unwrap_or(-1);
-                            // implies that covered_moves < needed_moves
-                            // We can still keep pushing with the known functions a and b.
-                            if a_matches && popped < A_INDEX as i8 {
-                                main.push(A_INDEX);
-                                covered_moves += a_len;
-                            } else if b_matches && popped < B_INDEX as i8 {
-                                main.push(B_INDEX);
-                                covered_moves += b_len;
-                            } else if popped < C_INDEX as i8 {
-                                // Therefore c matches.
-                                main.push(C_INDEX);
-                                covered_moves += c_len;
-                            } else {
-                                // just_popped = Some(popped);
-                                // main.pop
-                            }
-                        } else {
-                            // The last function we pushed was wrong.
-                            let wrong_func = main.pop().unwrap();
-                            just_popped = Some(wrong_func as i8);
-                            match wrong_func {
-                                A_INDEX => {
-                                    covered_moves -= a_len;
-                                    // Function a was wrong, try movement function b instead (if it matches).
-                                    // Otherwise, do not push anything and fix the function before this one too.
-                                    if b_matches {
-                                        main.push(B_INDEX);
-                                        covered_moves += b_len;
-                                    }
-                                }
-                                B_INDEX => {
-                                    covered_moves -= b_len;
-                                    // Movement function b did not work either, so lets try to use or construct function c from here.
-                                    if c_len > 0 {
-                                        // We already created a function c earlier, just use it.
-                                        if c_matches {
-                                            main.push(C_INDEX);
-                                            covered_moves += c_len;
-                                            c_funcs_on_stack += 1;
-                                        }
-                                    } else {
-                                        // We need to come up with a function c, since we cannot keep going with just a and b.
-                                        for new_c_len in 1..needed_moves - covered_moves {
-                                            c_func = AsciiMovementFunction {
-                                                moves: moves
-                                                    [covered_moves..covered_moves + new_c_len]
-                                                    .to_vec(),
-                                            };
-
-                                            if c_func.to_opcode_string().len() > max_opcodes {
-                                                // We cannot construct a function c.
-                                                break;
-                                            }
-
-                                            let c_matches = moves
-                                                [covered_moves..covered_moves + new_c_len]
-                                                == c_func.moves[..];
-                                            if !c_matches {
-                                                // We cannot construct a function c.
-                                                break;
-                                            }
-
-                                            c_len = new_c_len;
-                                            c_funcs_on_stack = 1;
-                                            main.push(C_INDEX);
-                                            covered_moves += c_len;
-                                            break;
-                                        }
-                                    }
-                                }
-                                C_INDEX => {
-                                    covered_moves -= c_len;
-                                    c_funcs_on_stack -= 1;
-
-                                    if c_funcs_on_stack == 0 {
-                                        // This version of a function for c did not work out, they all got popped again.
-                                        // We will try another version of function c, including one more move than the last one.
-                                        c_len += 1;
-                                        if covered_moves + c_len > needed_moves {
-                                            c_len = 0;
-                                            continue;
-                                        }
-                                        c_func = AsciiMovementFunction {
-                                            moves: moves[covered_moves..covered_moves + c_len]
-                                                .to_vec(),
-                                        };
-
-                                        let c_matches = moves[covered_moves..covered_moves + c_len]
-                                            == c_func.moves[..];
-
-                                        if c_matches
-                                            && c_func.to_opcode_string().len() <= max_opcodes
-                                        {
-                                            // We will also push it and see how it goes from here.
-                                            main.push(C_INDEX);
-                                            covered_moves += c_len;
-                                            c_funcs_on_stack += 1;
-                                        } else {
-                                            // Otherwise: We cannot build a function c to fit into the other spots from here,
-                                            // the other functions below wrong.
-                                            c_len = 0;
-                                        }
-                                    }
-
-                                    // Otherwise, this can still work with our current version of function c,
-                                    // just keep trying to swap the other functions.
-                                }
-                                x => panic!("Somehow there is this other thing here: {}", x),
-                            }
-                        }
-                    }
+                if let Ok(c_func) = main.find_c_function(&a_func, &b_func) {
+                    main.movement_functions = [a_func, b_func, c_func];
+                    return Ok(main);
                 }
-
-                // Main stack is empty, so we did not find anything.
-                // Continue with next possible function b.
             }
         }
 
         // We tried every valid combination of functions a and b, but did not find anything.
         Err("Could not find valid distribution of moves.")
+    }
+
+    fn find_c_function(
+        &mut self,
+        a_func: &AsciiMovementFunction,
+        b_func: &AsciiMovementFunction,
+    ) -> Result<AsciiMovementFunction, ()> {
+        // Finally, we need to try to come as far as possible from the start with a and b.
+        // If we cannot go any further, we know the first moves of the third movement function.
+        // Similarly, we can do the same thing from the back.
+        let moves_needed = self.needed_moves.len();
+        let a_len = a_func.moves.len();
+        let b_len = b_func.moves.len();
+
+        let mut c_func = Default::default();
+        let mut c_len = 0;
+        let mut c_funcs_on_stack = 0;
+
+        const A_INDEX: u8 = 0;
+        const B_INDEX: u8 = 1;
+        const C_INDEX: u8 = 2;
+
+        self.routine = vec![A_INDEX];
+        let mut covered_moves = a_len;
+        let mut just_popped: Option<i8> = None;
+
+        while !self.routine.is_empty() {
+            // if b_len == 9 {
+            // println!("{:?}", self.routine);
+            // }
+            if covered_moves == moves_needed && !self.routine_too_long() {
+                // The number of covered moves is correct and the length of the opcode string of
+                // the main function (one character per function, comma seperated, so two chars per function minus
+                // the missing last comma) is not too long.
+                return Ok(c_func);
+            } else {
+                // TODO: make this into some smart thing, so that it only compares the vectors if it really needs to know
+                let a_matches = self.matches(&a_func, covered_moves);
+                let b_matches = self.matches(&b_func, covered_moves);
+                let c_matches = self.matches(&c_func, covered_moves);
+                let popped = just_popped.take().unwrap_or(-1);
+                if a_matches && popped < A_INDEX as i8 {
+                    self.routine.push(A_INDEX);
+                    covered_moves += a_len;
+                } else if b_matches && popped < B_INDEX as i8 {
+                    self.routine.push(B_INDEX);
+                    covered_moves += b_len;
+                } else if c_matches && popped < C_INDEX as i8 {
+                    self.routine.push(C_INDEX);
+                    covered_moves += c_len;
+                    c_funcs_on_stack += 1;
+                } else {
+                    // The last function we pushed was wrong.
+                    let wrong_func = self.routine.pop().unwrap();
+                    just_popped = Some(wrong_func as i8);
+
+                    match wrong_func {
+                        A_INDEX => {
+                            covered_moves -= a_len;
+                        }
+                        B_INDEX => {
+                            covered_moves -= b_len;
+                        }
+                        C_INDEX => {
+                            covered_moves -= c_len;
+                            c_funcs_on_stack -= 1;
+
+                            if c_funcs_on_stack == 0 {
+                                // This version of a function for c did not work out, they all got popped again.
+                                // We will try another version of function c, including one more move than the last one.
+                                c_len += 1;
+                                if covered_moves + c_len > moves_needed {
+                                    c_len = 0;
+                                    c_func.moves.clear();
+                                    continue;
+                                }
+
+                                if let Ok(()) = self.next_c_func(&mut c_func, c_len, covered_moves)
+                                {
+                                    self.routine.push(C_INDEX);
+                                    covered_moves += c_len;
+                                    c_funcs_on_stack += 1;
+                                } else {
+                                    // Otherwise: We cannot build a function c to fit into the other spots from here,
+                                    // the other functions below wrong.
+                                    c_func.moves.clear();
+                                    c_len = 0;
+                                }
+                            }
+
+                            // Otherwise, this can still work with our current version of function c,
+                            // just keep trying to swap the other functions.
+                        }
+                        x => panic!("Somehow there is this other thing here: {}", x),
+                    }
+                }
+            }
+        }
+
+        // Main stack is empty, so we did not find anything.
+        // Continue with next possible function b.
+        self.routine.clear();
+        Err(())
     }
 
     pub fn to_opcode_string(&self) -> Vec<Opcode> {
@@ -242,6 +259,7 @@ impl AsciiMainRoutine {
     }
 }
 
+#[derive(Default)]
 pub struct AsciiController {
     map: Vec<Vec<Field>>,
     thread: Option<IntcodeThread>,
@@ -506,5 +524,47 @@ impl AsciiController {
             .expect("Ascii vacuum robot did not send the amount of collected dust.");
 
         collected_dust
+    }
+}
+
+mod tests {
+    #[test]
+    fn test_find_c() {
+        use super::*;
+        let map = "#######...#####
+#.....#...#...#
+#.....#...#...#
+......#...#...#
+......#...###.#
+......#.....#.#
+^########...#.#
+......#.#...#.#
+......#########
+........#...#..
+....#########..
+....#...#......
+....#...#......
+....#...#......
+....#####......";
+        let map = map
+            .lines()
+            .map(|line| line.chars().map(|c| Field::from(c)).collect())
+            .collect();
+        let controller = AsciiController {
+            map,
+            ..Default::default()
+        };
+        let moves = controller.moves_needed();
+        let a_func = AsciiMovementFunction::from("R,8,R,8");
+        let b_func = AsciiMovementFunction::from("R,4,R,4,R,8");
+
+        let mut main = AsciiMainRoutine {
+            max_opcodes: 20,
+            needed_moves: moves,
+            ..Default::default()
+        };
+        let c_func = main
+            .find_c_function(&a_func, &b_func)
+            .expect("No function c found, although it exists");
     }
 }

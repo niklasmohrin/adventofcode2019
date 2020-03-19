@@ -95,7 +95,13 @@ impl From<Opcode> for Field {
             .try_into()
             .expect("Invalid Opcode to Field conversion: Opcode is non-ascii.");
         let ascii: char = byte.into();
-        match ascii {
+        Field::from(ascii)
+    }
+}
+
+impl From<char> for Field {
+    fn from(c: char) -> Field {
+        match c {
             '#' => Field::Scaffold,
             '.' => Field::Space,
             '^' => Field::Robot(Direction::Up),
@@ -103,8 +109,8 @@ impl From<Opcode> for Field {
             '<' => Field::Robot(Direction::Left),
             '>' => Field::Robot(Direction::Right),
             _ => panic!(
-                "Invalid Opcode to Field conversion: {} ({}) does not map to a Field type.",
-                ascii, byte
+                "Invalid char to Field conversion: {} does not map to a Field type.",
+                c
             ),
         }
     }
