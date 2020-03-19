@@ -128,6 +128,7 @@ struct ArcadeCabinetOutputBuffer {
 struct ArcadeCabinetIo {
     pub screen: RefCell<TileScreen>,
     pub score: RefCell<Opcode>,
+    nmoves: RefCell<usize>,
     stdin: io::Stdin,
     buffered_output: RefCell<ArcadeCabinetOutputBuffer>,
     automatic_mode: bool,
@@ -137,6 +138,7 @@ impl ArcadeCabinetIo {
     pub fn new(automatic_mode: bool) -> Self {
         let stdin = io::stdin();
         let screen = RefCell::new(TileScreen::new());
+        let nmoves = RefCell::new(0);
         let score = RefCell::new(0);
         let buffered_output = RefCell::new(ArcadeCabinetOutputBuffer {
             buffer: [None, None, None],
@@ -146,6 +148,7 @@ impl ArcadeCabinetIo {
         Self {
             stdin,
             screen,
+            nmoves,
             score,
             buffered_output,
             automatic_mode,
@@ -197,6 +200,10 @@ impl ArcadeCabinetIo {
             self.screen.borrow_mut()[coord] = tile;
         }
     }
+
+    pub fn moves(&self) -> usize {
+        self.nmoves.borrow().clone()
+    }
 }
 
 impl IntcodeIo for ArcadeCabinetIo {
@@ -204,6 +211,8 @@ impl IntcodeIo for ArcadeCabinetIo {
         // The intcode program wants user input, the user should now get to see the current screen.
         self.print_screen();
         self.print_score();
+
+        *self.nmoves.borrow_mut() += 1;
 
         if self.automatic_mode {
             let screen = self.screen.borrow();
@@ -282,5 +291,9 @@ impl ArcadeCabinet {
             .iter()
             .map(|v| v.iter().filter(|&&t| t == tile).count())
             .sum()
+    }
+
+    pub fn moves(&self) -> usize {
+        self.inout.moves()
     }
 }

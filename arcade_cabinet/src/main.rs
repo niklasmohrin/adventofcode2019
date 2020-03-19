@@ -10,4 +10,5 @@ fn main() {
     let cabinet = ArcadeCabinet::new(true);
     cabinet.run(program, 2);
     println!("Block tiles: {}", cabinet.count_tile(Tile::Block));
+    println!("Moves: {}", cabinet.moves());
 }
