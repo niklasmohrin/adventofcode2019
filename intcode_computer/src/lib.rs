@@ -233,7 +233,7 @@ pub fn run_program<T: IntcodeIo>(program: &mut ProgramMemory, inout: &T) {
 /// read and parse an intcode program file
 pub fn read_program_from_file(filename: &str) -> ProgramMemory {
     fs::read_to_string(filename)
-        .unwrap()
+        .expect(&format!("File not found: '{}'", filename))
         .split(",")
         .map(|s| s.trim().parse::<Opcode>().unwrap())
         .collect()
