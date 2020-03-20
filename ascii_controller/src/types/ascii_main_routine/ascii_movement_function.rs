@@ -69,10 +69,12 @@ impl From<&'static str> for AsciiMovementFunction {
     }
 }
 
+#[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
     fn test_opcode_str_creation() {
-        use super::*;
         use crate::types::Move::*;
 
         let movement_function = AsciiMovementFunction {
@@ -110,5 +112,22 @@ mod tests {
                 ZERO + 1
             ]
         )
+    }
+
+    #[test]
+    fn test_from_str() {
+        use crate::types::Move::*;
+        let s = "R,8,R,8,R,4,R,4,R,8,L";
+        let f = AsciiMovementFunction::from(s);
+        assert_eq!(
+            f.moves,
+            vec![
+                TurnRight, Forward, Forward, Forward, Forward, Forward, Forward, Forward, Forward,
+                TurnRight, Forward, Forward, Forward, Forward, Forward, Forward, Forward, Forward,
+                TurnRight, Forward, Forward, Forward, Forward, TurnRight, Forward, Forward,
+                Forward, Forward, TurnRight, Forward, Forward, Forward, Forward, Forward, Forward,
+                Forward, Forward, TurnLeft
+            ]
+        );
     }
 }

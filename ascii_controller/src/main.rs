@@ -10,6 +10,6 @@ fn main() {
     controller.run_cameras();
     println!("{} moves calcualted", controller.moves_needed().len());
     println!("{} scaffoldings", controller.scaffolding_coords().len());
-    // let collected_dust = controller.walk_scaffolding();
-    // println!("Dust collected: {}", collected_dust);
+    let collected_dust = controller.walk_scaffolding();
+    println!("Dust collected: {}", collected_dust);
 }

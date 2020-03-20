@@ -189,7 +189,7 @@ impl AsciiController {
     }
 
     pub fn moves_needed(&self) -> Vec<Move> {
-        let mut cur = self.find_robot().unwrap();
+        let mut cur = self.find_robot().expect("Cannot determine needed moves, because the robot (the starting position and orientation) could not be found. Is the map already revealed?");
         let Coordinate(x, y) = cur;
 
         let mut facing = match self.map[y][x] {
@@ -242,13 +242,14 @@ impl AsciiController {
         let routine = AsciiMainRoutine::construct_from_moves(moves, 21)
             .expect("There is no possible solution to the given scaffolding map.");
 
+        const NEWLINE: Opcode = 0x0a;
         // Submit the main movement routine
         {
             let opcodes = routine.to_opcode_string();
             // Check length at most 20 (without newline) and newline at the end
             assert!(opcodes.len() > 0);
             assert!(opcodes.len() <= 21);
-            assert!(*opcodes.last().unwrap() == 0xa);
+            assert!(*opcodes.last().unwrap() == NEWLINE);
             for &opcode in opcodes.iter() {
                 thread.send(opcode);
             }
@@ -260,7 +261,7 @@ impl AsciiController {
             // Check length at most 20 (without newline) and newline at the end
             assert!(opcodes.len() > 0);
             assert!(opcodes.len() <= 21);
-            assert!(*opcodes.last().unwrap() == 0xa);
+            assert!(*opcodes.last().unwrap() == NEWLINE);
             for &opcode in opcodes.iter() {
                 thread.send(opcode);
             }
@@ -271,5 +272,66 @@ impl AsciiController {
             .expect("Ascii vacuum robot did not send the amount of collected dust.");
 
         collected_dust
+    }
+}
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+
+    pub const MAP: &'static str = "#######...#####
+#.....#...#...#
+#.....#...#...#
+......#...#...#
+......#...###.#
+......#.....#.#
+^########...#.#
+......#.#...#.#
+......#########
+........#...#..
+....#########..
+....#...#......
+....#...#......
+....#...#......
+....#####......";
+
+    pub fn get_map() -> Vec<Vec<Field>> {
+        MAP.lines()
+            .map(|line| line.chars().map(|c| Field::from(c)).collect())
+            .collect()
+    }
+
+    #[test]
+    fn test_get_moves() {
+        use crate::types::Move::*;
+        let map = get_map();
+        let instance = AsciiController {
+            map,
+            ..Default::default()
+        };
+        let moves = instance.moves_needed();
+        let expected_first_moves = vec![
+            TurnRight, Forward, Forward, Forward, Forward, Forward, Forward, Forward, Forward,
+            TurnRight, Forward, Forward, Forward, Forward, Forward, Forward, Forward, Forward,
+            TurnRight, Forward, Forward, Forward, Forward, TurnRight, Forward, Forward, Forward,
+            Forward, TurnRight, Forward, Forward, Forward, Forward, Forward, Forward, Forward,
+            Forward, TurnLeft,
+        ];
+
+        let len = expected_first_moves.len();
+        assert_eq!(moves[..len], expected_first_moves[..]);
+    }
+
+    #[test]
+    fn test_find_robot() {
+        let map = get_map();
+        let instance = AsciiController {
+            map,
+            ..Default::default()
+        };
+        let robot = instance
+            .find_robot()
+            .expect("Robot was not found, although it is on the map.");
+        assert_eq!(robot, Coordinate(0, 6));
     }
 }

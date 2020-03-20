@@ -222,32 +222,16 @@ impl AsciiMainRoutine {
     }
 }
 
+#[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::tests::get_map;
+
     #[test]
     fn test_find_c() {
-        use super::*;
-        use crate::types::Field;
         use crate::AsciiController;
 
-        let map = "#######...#####
-#.....#...#...#
-#.....#...#...#
-......#...#...#
-......#...###.#
-......#.....#.#
-^########...#.#
-......#.#...#.#
-......#########
-........#...#..
-....#########..
-....#...#......
-....#...#......
-....#...#......
-....#####......";
-        let map = map
-            .lines()
-            .map(|line| line.chars().map(|c| Field::from(c)).collect())
-            .collect();
+        let map = get_map();
         let controller = AsciiController {
             map,
             ..Default::default()
