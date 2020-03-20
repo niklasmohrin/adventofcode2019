@@ -68,3 +68,47 @@ impl From<&'static str> for AsciiMovementFunction {
         Self { moves }
     }
 }
+
+mod tests {
+    #[test]
+    fn test_opcode_str_creation() {
+        use super::*;
+        use crate::types::Move::*;
+
+        let movement_function = AsciiMovementFunction {
+            moves: vec![
+                TurnLeft, TurnRight, TurnLeft, Forward, Forward, Forward, TurnAround, Forward,
+                TurnRight, Forward,
+            ],
+        };
+
+        const L: Opcode = 'L' as u8 as Opcode;
+        const R: Opcode = 'R' as u8 as Opcode;
+        const COMMA: Opcode = 0x2c;
+        const ZERO: Opcode = 0x30;
+
+        let opcode_str = movement_function.to_opcode_string();
+        assert_eq!(
+            opcode_str,
+            vec![
+                L,
+                COMMA,
+                R,
+                COMMA,
+                L,
+                COMMA,
+                ZERO + 3,
+                COMMA,
+                L,
+                COMMA,
+                L,
+                COMMA,
+                ZERO + 1,
+                COMMA,
+                R,
+                COMMA,
+                ZERO + 1
+            ]
+        )
+    }
+}
