@@ -18,9 +18,9 @@ impl AsciiMovementFunction {
 
         for m in self.moves.iter() {
             match &m {
-                Move::TurnLeft => opcodes.push(LEFT),   // 'L'
-                Move::TurnRight => opcodes.push(RIGHT), // 'R'
-                Move::TurnAround => opcodes.extend([LEFT, COMMA, LEFT].iter()), // 'L', ',', 'L'
+                Move::TurnLeft => opcodes.push(LEFT),
+                Move::TurnRight => opcodes.push(RIGHT),
+                Move::TurnAround => opcodes.extend([LEFT, COMMA, LEFT].iter()),
                 Move::Forward => {
                     if inc_last {
                         // index of the last real value (past the comma)

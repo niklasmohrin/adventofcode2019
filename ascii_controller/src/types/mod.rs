@@ -11,4 +11,4 @@ mod field;
 pub use self::field::Field;
 
 mod ascii_main_routine;
-pub use ascii_main_routine::AsciiMainRoutine;
+pub use self::ascii_main_routine::AsciiMainRoutine;

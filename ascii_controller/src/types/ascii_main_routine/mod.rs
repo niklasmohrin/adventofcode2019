@@ -16,15 +16,25 @@ pub struct AsciiMainRoutine {
 impl AsciiMainRoutine {
     fn matches(&self, f: &AsciiMovementFunction, offset: usize) -> bool {
         let f_len = f.moves.len();
+        let too_long =
+            Self::chars_needed_for_routine_with_len(self.routine.len() + 1) > self.max_opcodes;
 
-        !self.routine_too_long()
+        !too_long
             && f_len > 0
             && offset + f_len <= self.needed_moves.len()
             && self.needed_moves[offset..offset + f_len] == f.moves[..]
     }
 
+    fn chars_needed_for_routine_with_len(len: usize) -> usize {
+        if len == 0 {
+            0
+        } else {
+            len * 2 - 1
+        }
+    }
+
     fn routine_too_long(&self) -> bool {
-        (self.routine.len() * 2) >= self.max_opcodes
+        Self::chars_needed_for_routine_with_len(self.routine.len()) > self.max_opcodes
     }
 
     /// If possible, contructs a movement function of length c_len, that matches the next c_len moves
@@ -200,11 +210,11 @@ impl AsciiMainRoutine {
     }
 
     pub fn to_opcode_string(&self) -> Vec<Opcode> {
-        const FUNCTION_LETTERS: [char; 3] = ['A', 'B', 'C'];
+        const FUNCTION_LETTERS: [&'static str; 3] = ["A", "B", "C"];
         self.routine
             .iter()
-            .map(|&idx| FUNCTION_LETTERS[idx as usize].to_string())
-            .collect::<Vec<String>>()
+            .map(|&idx| FUNCTION_LETTERS[idx as usize])
+            .collect::<Vec<&'static str>>()
             .join(",")
             .bytes()
             .map(|c| Opcode::from(c))
@@ -251,8 +261,28 @@ mod tests {
             needed_moves: moves,
             ..Default::default()
         };
-        let c_func = main
-            .find_c_function(&a_func, &b_func)
+
+        main.find_c_function(&a_func, &b_func)
             .expect("No function c found, although it exists");
+    }
+
+    #[test]
+    fn test_opcode_string_creation() {
+        use super::*;
+        let main = AsciiMainRoutine {
+            routine: vec![0, 1, 2, 1, 2, 0],
+            ..Default::default()
+        };
+
+        const A: Opcode = 0x41;
+        const B: Opcode = 0x42;
+        const C: Opcode = 0x43;
+        const COMMA: Opcode = 0x2c;
+
+        let opcode_str = main.to_opcode_string();
+        assert_eq!(
+            opcode_str,
+            vec![A, COMMA, B, COMMA, C, COMMA, B, COMMA, C, COMMA, A]
+        );
     }
 }
