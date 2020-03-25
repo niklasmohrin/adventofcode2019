@@ -239,7 +239,7 @@ impl AsciiController {
         // Find subprograms A,B,C
         let moves = self.moves_needed();
         // let routine = self.find_walking_routine(moves);
-        let routine = AsciiMainRoutine::construct_from_moves(moves, 21)
+        let routine = AsciiMainRoutine::construct_from_moves(moves, 20)
             .expect("There is no possible solution to the given scaffolding map.");
 
         const NEWLINE: Opcode = 0x0a;

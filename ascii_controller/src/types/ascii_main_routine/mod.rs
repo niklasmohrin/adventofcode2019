@@ -86,7 +86,7 @@ impl AsciiMainRoutine {
             }
             // Similarly, there has to be a movement function for the last n moves
             for b_len in 0..(moves_needed - a_len) {
-                // println!("\tTrying b_len {}", b_len);
+                println!("\tTrying b_len {}", b_len);
                 b_func.moves = main.needed_moves[moves_needed - b_len..].to_vec();
                 if b_func.to_opcode_string().len() > max_opcodes {
                     // With this length of a, there does not seem to be a solution,
@@ -152,6 +152,12 @@ impl AsciiMainRoutine {
                     self.routine.push(B_INDEX);
                     covered_moves += b_len;
                 } else if c_matches && popped < C_INDEX as i8 {
+                    self.routine.push(C_INDEX);
+                    covered_moves += c_len;
+                    c_funcs_on_stack += 1;
+                } else if c_funcs_on_stack == 0 {
+                    c_len = 1;
+                    self.next_c_func(&mut c_func, c_len, covered_moves).expect("Method self.next_c_func could not construct a movement function of length one, although it should clearly be able too.");
                     self.routine.push(C_INDEX);
                     covered_moves += c_len;
                     c_funcs_on_stack += 1;
